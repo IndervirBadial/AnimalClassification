@@ -1,0 +1,93 @@
+ODS graphics ON;
+
+proc import out=trucking datafile ="/home/u57771545/Mydata/TRUCKING.txt"
+dbms= tab replace ;
+run;
+
+/*define interactions*/
+data reg1;
+set truckingdummy;
+pdist = PRICPTM*DISTANCE;
+pwt = PRICPTM*WEIGHT;
+pprod = PRICPTM*PRODUCT;
+porig = PRICPTM*Origindummy;
+pdereg = PRICPTM*DEREGdummy;
+distwt = DISTANCE*WEIGHT;
+distprod = DISTANCE*PRODUCT;
+distorig = DISTANCE*Origindummy;
+distdereg = DISTANCE*DEREGdummy;
+wtprod = WEIGHT*PRODUCT;
+wtorigin = WEIGHT*Origindummy;
+wtdereg = WEIGHT*DEREGdummy;
+prodorig = PRODUCT*Origindummy;
+proddereg = PRODUCT*DEREGdummy;
+origdereg = Origindummy*DEREGdummy;
+
+label pdist  = 'interaction between PRICPTM & DISTANCE'
+pwt  = 'interaction between PRICPTM & WEIGHT'
+pprod  = 'interaction between PRICPTM & PRODUCT'
+porig  = 'interaction between PRICPTM & Origindummy'
+pdereg  = 'interaction between PRICPTM & DEREGdummy'
+distwt  = 'interaction between DISTANCE & WEIGHT'
+distprod  = 'interaction between DISTANCE & PRODUCT'
+distorig  = 'interaction between DISTANCE & Origindummy'
+distdereg  = 'interaction between DISTANCE & DEREGdummy'
+wtprod  = 'interaction between WEIGHT & PRODUCT'
+wtorigin  = 'interaction between WEIGHT & Origindummy'
+wtdereg  = 'interaction between WEIGHT & DEREGdummy'
+prodorig  = 'interaction between PRODUCT & Origindummy'
+proddereg  = 'interaction between PRODUCT & DEREGdummy'
+origdereg = 'interaction between Origindummy & DEREGdummy'
+run;
+
+proc reg data=reg1;
+model LNPRICE =DISTANCE WEIGHT PRODUCT PCTLOAD ORIGINDummy DEREGdummy MARKET
+ distwt distprod distorig distdereg
+wtprod wtorigin wtdereg wtprodorig proddereg origdereg/ 
+selection =stepwise slentry= .1 slstay= .15 adjrsq cp aic pcorr2 press influence;
+run;
+*Found 7 signifcant variables, added Product and DEREGdummy back since their interaction
+is signifcant, so by default they will be included in the final model.;
+proc reg data=reg1;
+model LNPRICE =DISTANCE WEIGHT PRODUCT ORIGINDummy DEREGdummy
+distprod wtdereg prodorig proddereg/ ss2
+adjrsq cp aic press influence r;
+output out=reg1outlierdetection r=residual student=studentizedresiduals cookd=cooks rstudent=
+studdeletedresid h=leverage;
+run;
+proc print data=reg1outlierdetection;
+run; 
+
+
+data truckingdummy;
+set trucking;
+if Origin = "MIA" then Origindummy=0;
+else Origindummy=1;
+if Market= "SMALL" then Marketdummy=0;
+else Marketdummy=1;
+if DEREG="NO" then DEREGdummy=0;
+else DEREGdummy=1;
+drop Origin;
+drop Market;
+drop DEREG;
+drop Carrier;
+run;
+proc contents data=truckingdummy;
+run;
+
+proc univariate normal;
+        var residual; 
+run;
+
+proc rank normal=vw; /* Computing ranked normal scores by residuals*/
+var residual;
+ranks nscore; run;
+proc plot ;
+plot residual*nscore='R'; /*plotting ranked residual vs. normal score*/
+label nscore='Normal Score'; run;
+ODS graphics off;
+
+proc corr data=reg1;
+var DISTANCE WEIGHT PRODUCT ORIGINDummy DEREGdummy
+;
+run;
